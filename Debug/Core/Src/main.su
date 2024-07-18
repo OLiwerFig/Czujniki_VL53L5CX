@@ -1,10 +1,7 @@
-../Core/Src/main.c:71:5:_write	24	static
-../Core/Src/main.c:82:5:main	8	static
-../Core/Src/main.c:179:6:SystemClock_Config	96	static
-../Core/Src/main.c:225:6:ProcessData	168	static
-../Core/Src/main.c:234:6:I2C_Scan	16	static
-../Core/Src/main.c:249:9:Check_Sensor_Communication	24	static
-../Core/Src/main.c:259:6:Initialize_Sensors	16	static
-../Core/Src/main.c:357:9:PollingSensor	48	static
-../Core/Src/main.c:374:6:Reset_Sensors	8	static
-../Core/Src/main.c:391:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:67:5:_write	24	static
+../Core/Src/main.c:78:5:main	24	static
+../Core/Src/main.c:153:6:SystemClock_Config	96	static
+../Core/Src/main.c:199:6:ProcessData	48	static
+../Core/Src/main.c:211:6:Initialize_Sensors	16	static
+../Core/Src/main.c:257:6:Scan_I2C_Devices	16	static
+../Core/Src/main.c:277:6:Error_Handler	4	static,ignoring_inline_asm

@@ -25,5 +25,5 @@ SUBDIRS := \
 Core/Src \
 Core/Startup \
 Drivers/STM32L4xx_HAL_Driver/Src \
-Drivers/VL53L7CX_ULD_API/src \
+Drivers/VL53L5CX_ULD_API/src \
 

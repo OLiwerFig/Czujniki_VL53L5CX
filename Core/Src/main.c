@@ -11,7 +11,7 @@
   *
   * This software is licensed under terms that can be found in the LICENSE file
   * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
+  * If no LICENSE file comes with the this file, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -25,12 +25,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
-#include "vl53l7cx_api.h"
+#include "vl53l5cx_api.h"
 #include "platform.h"
-#include "vl53l7cx_plugin_detection_thresholds.h"
-#include "vl53l7cx_plugin_motion_indicator.h"
-#define POLLING_TIMEOUT 500 // Zmienna timeoutu w milisekundach
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,7 +36,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define VL53L7CX_I2C_ADDRESS 0x29 // Domyślny adres I2C dla czujnika VL53L7CX
+#define VL53L5CX_DEFAULT_ADDRESS 0x29
+#define SENSOR_COUNT 3
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,18 +49,16 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-VL53L7CX_Configuration dev1, dev2, dev3;
-VL53L7CX_ResultsData results1, results2, results3;
+VL53L5CX_Configuration dev[SENSOR_COUNT];
+VL53L5CX_ResultsData results[SENSOR_COUNT];
+uint8_t sensor_addresses[SENSOR_COUNT] = {0x30, 0x31, 0x32}; // New addresses for the sensors
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void ProcessData(VL53L7CX_Configuration *dev, VL53L7CX_ResultsData *results, int sensor_id);
-void I2C_Scan(void);
 void Initialize_Sensors(void);
-void Reset_Sensors(void);
-uint8_t PollingSensor(VL53L7CX_Configuration *dev);
+void ProcessData(VL53L5CX_ResultsData *results, uint8_t sensor_index);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -111,20 +107,21 @@ int main(void)
   // Test UART
   printf("UART działa poprawnie\r\n");
 
-  Reset_Sensors();
+  Scan_I2C_Devices();
 
-
-  // Skanowanie magistrali I2C
-  I2C_Scan();
-
-  // Inicjalizacja czujników
+  // Initialize all sensors
   Initialize_Sensors();
 
-  // Startowanie pomiarów
+  // Start measurements for all sensors
   printf("Rozpoczynanie pomiarów...\r\n");
-  vl53l7cx_start_ranging(&dev1);
-  vl53l7cx_start_ranging(&dev2);
-  vl53l7cx_start_ranging(&dev3);
+  for (int i = 0; i < SENSOR_COUNT; i++) {
+    int status = vl53l5cx_start_ranging(&dev[i]);
+    if (status == VL53L5CX_STATUS_OK) {
+        printf("Pomiary dla czujnika %d rozpoczęte pomyślnie\r\n", i);
+    } else {
+        printf("Błąd rozpoczynania pomiarów dla czujnika %d, kod błędu: %d\r\n", i, status);
+    }
+  }
 
   /* USER CODE END 2 */
 
@@ -132,38 +129,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-/*    uint8_t status1, status2, status3;
-
-      status1 = PollingSensor(&dev1);
-      status2 = PollingSensor(&dev2);
-      status3 = PollingSensor(&dev3);
-
-      if (status1 != 0xFF) {
-          // Przetwarzanie danych z czujnika 1
-          vl53l7cx_get_ranging_data(&dev1, &results1);
-          ProcessData(&dev1, &results1, 1);
-      } else {
-          printf("Błąd odczytu z czujnika 1\r\n");
-      }
-
-      if (status2 != 0xFF) {
-          // Przetwarzanie danych z czujnika 2
-          vl53l7cx_get_ranging_data(&dev2, &results2);
-          ProcessData(&dev2, &results2, 2);
-      } else {
-          printf("Błąd odczytu z czujnika 2\r\n");
-      }
-
-      if (status3 != 0xFF) {
-          // Przetwarzanie danych z czujnika 3
-          vl53l7cx_get_ranging_data(&dev3, &results3);
-          ProcessData(&dev3, &results3, 3);
-      } else {
-          printf("Błąd odczytu z czujnika 3\r\n");
-      }
-*/
-
-      HAL_Delay(100);
+    uint8_t isReady;
+    for (int i = 0; i < SENSOR_COUNT; i++) {
+        if (vl53l5cx_check_data_ready(&dev[i], &isReady) == VL53L5CX_STATUS_OK && isReady) {
+            vl53l5cx_get_ranging_data(&dev[i], &results[i]);
+            ProcessData(&results[i], i);
+        } else {
+            printf("Czujnik %d nie ma nowych danych do odczytu\r\n", i);
+        }
+    }
+    HAL_Delay(5000);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -175,7 +150,6 @@ int main(void)
   * @brief System Clock Configuration
   * @retval None
   */
-
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -222,165 +196,77 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void ProcessData(VL53L7CX_Configuration *dev, VL53L7CX_ResultsData *results, int sensor_id) {
-    char msg[128];
-    uint32_t distance = results->distance_mm[0];  // Zakładamy, że chcemy odczytać pierwszą wartość odległości
-
-    // Formatowanie danych i wysyłanie przez UART
-    snprintf(msg, sizeof(msg), "Czujnik %d: Odległość = %lu mm\r\n", sensor_id, distance);
-    printf("%s", msg);
-}
-
-void I2C_Scan(void)
-{
-    printf("Rozpoczęcie skanowania I2C...\r\n");
-    for(uint8_t address = 1; address < 127; address++ )
-    {
-        // Spróbuj odczytać 1 bajt z aktualnego adresu
-        if(HAL_I2C_IsDeviceReady(&hi2c1, address << 1, 1, 10) == HAL_OK)
-        {
-            printf("Urządzenie znalezione pod adresem 0x%02X\r\n", address);
-        }
+void ProcessData(VL53L5CX_ResultsData *results, uint8_t sensor_index) {
+    printf("Sensor %d:\n\r", sensor_index);
+    for (int i = 0; i < 16; i += 4) { // Displaying 4 measurements per line
+        printf("Distance %d-%d: %d mm, %d mm, %d mm, %d mm\n\r",
+               i, i+3,
+               results->distance_mm[i],
+               results->distance_mm[i+1],
+               results->distance_mm[i+2],
+               results->distance_mm[i+3]);
     }
-    printf("Skanowanie I2C zakończone.\r\n");
-}
-
-
-uint8_t Check_Sensor_Communication(VL53L7CX_Configuration *dev) {
-    uint8_t data;
-    uint8_t status = VL53L7CX_WrByte(&dev->platform, 0x7FFF, 0x00); // Switch to page 0
-    if (status == VL53L7CX_STATUS_OK) {
-        status = VL53L7CX_RdByte(&dev->platform, 0x010F, &data); // Read WHO_AM_I or similar register
-        printf("WHO_AM_I register: 0x%02X, status: %d\r\n", data, status);
-    }
-    return status;
 }
 
 void Initialize_Sensors(void) {
     uint8_t status;
-    uint8_t is_alive;
-    uint8_t new_address1 = 0x30; // Nowy adres dla czujnika 1
-//    uint8_t new_address2 = 0x31; // Nowy adres dla czujnika 2
-//    uint8_t new_address3 = 0x32; // Nowy adres dla czujnika 3
+    uint8_t is_alive = 0;
 
-    printf("Rozpoczęcie inicjalizacji czujników...\r\n");
+    for (int i = 0; i < SENSOR_COUNT; i++) {
+        printf("Inicjalizacja czujnika %d...\r\n", i);
 
-    // Inicjalizacja pierwszego czujnika
-    printf("Sprawdzanie czujnika 1...\r\n");
-    status = vl53l7cx_is_alive(&dev1, &is_alive);
-    printf("Status czujnika 1: %d, is_alive: %d\r\n", status, is_alive);
-    if (status == VL53L7CX_STATUS_OK && is_alive) {
-        status = vl53l7cx_set_i2c_address(&dev1, new_address1 << 1);
-        if (status == VL53L7CX_STATUS_OK) {
-            dev1.platform.address = new_address1 << 1;
-            if (vl53l7cx_init(&dev1) == VL53L7CX_STATUS_OK) {
-                printf("Czujnik 1 zainicjalizowany z adresem 0x%02X\r\n", new_address1);
+        dev[i].platform.address = VL53L5CX_DEFAULT_ADDRESS << 1;
+
+        // Check if sensor is alive at default address
+        status = vl53l5cx_is_alive(&dev[i], &is_alive);
+        printf("Status czujnika %d (domyślny adres): %d, is_alive: %d\r\n", i, status, is_alive);
+
+        if (status == VL53L5CX_STATUS_OK && is_alive) {
+            // Change sensor I2C address
+            status = vl53l5cx_set_i2c_address(&dev[i], sensor_addresses[i] << 1);
+            if (status == VL53L5CX_STATUS_OK) {
+                dev[i].platform.address = sensor_addresses[i] << 1;
+                printf("Adres I2C czujnika %d zmieniony na 0x%02X\r\n", i, sensor_addresses[i]);
             } else {
-                printf("Błąd inicjalizacji czujnika 1\r\n");
+                printf("Błąd ustawienia adresu dla czujnika %d, kod błędu: %d\r\n", i, status);
+                continue;
+            }
+
+            // Check if sensor is alive at new address
+            status = vl53l5cx_is_alive(&dev[i], &is_alive);
+            printf("Status czujnika %d (nowy adres): %d, is_alive: %d\r\n", i, status, is_alive);
+            if (status != VL53L5CX_STATUS_OK || !is_alive) {
+                printf("Czujnik %d nie jest żywy po zmianie adresu, status: %d, is_alive: %d\r\n", i, status, is_alive);
+                continue;
+            }
+
+            // Initialize sensor
+            status = vl53l5cx_init(&dev[i]);
+            if (status == VL53L5CX_STATUS_OK) {
+                printf("Czujnik %d zainicjalizowany z adresem 0x%02X\r\n", i, sensor_addresses[i]);
+            } else {
+                printf("Błąd inicjalizacji czujnika %d, kod błędu: %d\r\n", i, status);
             }
         } else {
-            printf("Nie udało się ustawić adresu czujnika 1, status: %d\r\n", status);
+            printf("Czujnik %d nie jest żywy przy domyślnym adresie, status: %d, is_alive: %d\r\n", i, status, is_alive);
         }
-    } else {
-        printf("Czujnik 1 nie jest żywy lub błąd sprawdzania statusu, status: %d, is_alive: %d\r\n", status, is_alive);
     }
-    /*
-    // Inicjalizacja drugiego czujnika
-    printf("Sprawdzanie czujnika 2...\r\n");
-    status = vl53l7cx_is_alive(&dev2, &is_alive);
-    printf("Status czujnika 2: %d, is_alive: %d\r\n", status, is_alive);
-    if (status == VL53L7CX_STATUS_OK && is_alive) {
-        status = vl53l7cx_set_i2c_address(&dev2, new_address2 << 1);
-        if (status == VL53L7CX_STATUS_OK) {
-            dev2.platform.address = new_address2 << 1;
-            if (vl53l7cx_init(&dev2) == VL53L7CX_STATUS_OK) {
-                printf("Czujnik 2 zainicjalizowany z adresem 0x%02X\r\n", new_address2);
-            } else {
-                printf("Błąd inicjalizacji czujnika 2\r\n");
-            }
-        } else {
-            printf("Nie udało się ustawić adresu czujnika 2, status: %d\r\n", status);
-        }
-    } else {
-        printf("Czujnik 2 nie jest żywy lub błąd sprawdzania statusu, status: %d, is_alive: %d\r\n", status, is_alive);
-    }
-
-    // Inicjalizacja trzeciego czujnika
-    printf("Sprawdzanie czujnika 3...\r\n");
-    status = vl53l7cx_is_alive(&dev3, &is_alive);
-    printf("Status czujnika 3: %d, is_alive: %d\r\n", status, is_alive);
-    if (status == VL53L7CX_STATUS_OK && is_alive) {
-        status = vl53l7cx_set_i2c_address(&dev3, new_address3 << 1);
-        if (status == VL53L7CX_STATUS_OK) {
-            dev3.platform.address = new_address3 << 1;
-            if (vl53l7cx_init(&dev3) == VL53L7CX_STATUS_OK) {
-                printf("Czujnik 3 zainicjalizowany z adresem 0x%02X\r\n", new_address3);
-            } else {
-                printf("Błąd inicjalizacji czujnika 3\r\n");
-            }
-        } else {
-            printf("Nie udało się ustawić adresu czujnika 3, status: %d\r\n", status);
-        }
-    } else {
-        printf("Czujnik 3 nie jest żywy lub błąd sprawdzania statusu, status: %d, is_alive: %d\r\n", status, is_alive);
-    }
-    */
-    printf("Inicjalizacja czujników zakończona.\r\n");
-
-
-
-    // Add communication check
-    printf("Sprawdzanie komunikacji z czujnikiem 1...\r\n");
-    if (Check_Sensor_Communication(&dev1) == VL53L7CX_STATUS_OK) {
-        printf("Komunikacja z czujnikiem 1 jest OK\r\n");
-    } else {
-        printf("Błąd komunikacji z czujnikiem 1\r\n");
-    }
-/*    printf("Sprawdzanie komunikacji z czujnikiem 2...\r\n");
-    if (Check_Sensor_Communication(&dev2) == VL53L7CX_STATUS_OK) {
-        printf("Komunikacja z czujnikiem 2 jest OK\r\n");
-    } else {
-        printf("Błąd komunikacji z czujnikiem 2\r\n");
-    }
-
-    printf("Sprawdzanie komunikacji z czujnikiem 3...\r\n");
-    if (Check_Sensor_Communication(&dev3) == VL53L7CX_STATUS_OK) {
-        printf("Komunikacja z czujnikiem 3 jest OK\r\n");
-    } else {
-        printf("Błąd komunikacji z czujnikiem 3\r\n");
-    }
-
-*/
-
 }
 
-uint8_t PollingSensor(VL53L7CX_Configuration *dev) {
-    uint8_t status = 0xFF;
-    uint32_t timeout = HAL_GetTick();
-    uint8_t temp_buffer[2];
 
-    while (status == 0xFF) {
-        // Odczytanie statusu z czujnika
-        status = HAL_I2C_Mem_Read(&hi2c1, dev->platform.address, VL53L7CX_I2C_ADDRESS, I2C_MEMADD_SIZE_8BIT, temp_buffer, 2, 1000);
-
-        if ((HAL_GetTick() - timeout) > POLLING_TIMEOUT) {
-            printf("Timeout podczas polling czujnika o adresie 0x%02X\r\n", dev->platform.address);
-            return 0xFF; // Zwraca 0xFF w przypadku timeoutu
+void Scan_I2C_Devices() {
+    printf("Skanowanie urządzeń I2C...\r\n");
+    HAL_StatusTypeDef result;
+    uint8_t i;
+    for (i = 1; i < 128; i++) {
+        result = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i << 1), 3, 5);
+        if (result == HAL_OK) {
+            printf("Urządzenie znalezione pod adresem: 0x%02X\r\n", i);
         }
     }
-    return temp_buffer[1];
+    printf("Skanowanie zakończone.\r\n");
 }
 
-void Reset_Sensors(void) {
-
-
-    // Resetowanie czujnika
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
-    HAL_Delay(10); // 10 ms
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
-    HAL_Delay(10); // 10 ms
-    printf("Magistrala zresetowana\r\n");
-}
 
 /* USER CODE END 4 */
 
@@ -391,7 +277,6 @@ void Reset_Sensors(void) {
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
