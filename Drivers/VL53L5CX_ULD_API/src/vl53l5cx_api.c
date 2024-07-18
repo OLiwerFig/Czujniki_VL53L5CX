@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "vl53l5cx_api.h"
 #include "vl53l5cx_buffers.h"
 

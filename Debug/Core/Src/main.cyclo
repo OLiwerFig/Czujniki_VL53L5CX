@@ -1,7 +1,7 @@
-../Core/Src/main.c:67:5:_write	1
-../Core/Src/main.c:78:5:main	6
-../Core/Src/main.c:153:6:SystemClock_Config	4
-../Core/Src/main.c:199:6:ProcessData	2
-../Core/Src/main.c:211:6:Initialize_Sensors	8
-../Core/Src/main.c:257:6:Scan_I2C_Devices	3
-../Core/Src/main.c:277:6:Error_Handler	1
+../Core/Src/main.c:66:5:_write	1
+../Core/Src/main.c:77:5:main	4
+../Core/Src/main.c:148:6:SystemClock_Config	4
+../Core/Src/main.c:194:6:ProcessData	2
+../Core/Src/main.c:206:6:Initialize_Sensor	8
+../Core/Src/main.c:258:6:Scan_I2C_Devices	3
+../Core/Src/main.c:278:6:Error_Handler	1

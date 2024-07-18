@@ -68,20 +68,21 @@ uint8_t VL53L5CX_RdMulti(
 
 uint8_t VL53L5CX_Reset_Sensor(VL53L5CX_Platform *p_platform)
 {
-	/* (Optional) Need to be implemented by customer. This function returns 0 if OK */
 
-	/* Set pin LPN to LOW */
-	/* Set pin AVDD to LOW */
-	/* Set pin VDDIO  to LOW */
-	VL53L5CX_WaitMs(p_platform, 100);
 
-	/* Set pin LPN of to HIGH */
-	/* Set pin AVDD of to HIGH */
-	/* Set pin VDDIO of  to HIGH */
-	VL53L5CX_WaitMs(p_platform, 100);
+    /* Set PC9 to LOW */
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+    VL53L5CX_WaitMs(p_platform, 100);
 
-	return 0;
+    /* Set PC9 to HIGH */
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+    VL53L5CX_WaitMs(p_platform, 100);
+
+
+
+    return 0;
 }
+
 
 void VL53L5CX_SwapBuffer(
 		uint8_t 		*buffer,
